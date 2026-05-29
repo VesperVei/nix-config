@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Nix build outputs. `nix build` creates these in the current directory.
+result
+result-*
+
+# Logs
+*.log
+*.log.*
+*.nvimlog
+
+# Neovim local/private config
+programs/nvim/config/lua/chenhun/core/python_venv_map.lua
+
+# Tmux plugins, if they are later moved into this repository.
+programs/tmux/plugins/*
+!programs/tmux/plugins/tpm/

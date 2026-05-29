@@ -11,14 +11,15 @@
   outputs = { nixpkgs, home-manager, ... }:
   let
     system = "aarch64-darwin";
-    username = "chenhun";
-    homeDirectory = "/Users/chenhun";
+    username = "zaochuan";
+    homeDirectory = "/Users/${username}";
+    hostname = "macbook";
   in {
-    homeConfigurations.${username} = home-manager.lib.homeManagerConfiguration {
+    homeConfigurations."${username}@${hostname}" = home-manager.lib.homeManagerConfiguration {
       pkgs = nixpkgs.legacyPackages.${system};
 
       modules = [
-        ./home.nix
+        ./systems/darwin/macbook.nix
         {
           home.username = username;
           home.homeDirectory = homeDirectory;
@@ -27,3 +28,4 @@
     };
   };
 }
+
