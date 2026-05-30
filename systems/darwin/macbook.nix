@@ -7,5 +7,8 @@
     ../../programs/nvim/default.nix
     ../../programs/yazi/default.nix
     ../../programs/tmux/default.nix
+    ../../programs/aerospace
+    ../../programs/sketchybar
+    ../../programs/kitty
   ];
 }
