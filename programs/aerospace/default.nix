@@ -1,7 +1,7 @@
 { pkgs, ... }:
 
 {
-  xdg.configFile."aerospace".source = ./config;
+  home.file.".aerospace.toml".source = ./config/aerospace.toml;
 
   home.packages = with pkgs; [
     aerospace
