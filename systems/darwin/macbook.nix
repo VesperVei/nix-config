@@ -1,6 +1,4 @@
-{ ... }:
-
-{
+{...}: {
   imports = [
     ../../profiles/base.nix
     ../../profiles/git.nix
@@ -10,5 +8,6 @@
     ../../programs/aerospace
     ../../programs/sketchybar
     ../../programs/kitty
+    ../../programs/zsh
   ];
 }
