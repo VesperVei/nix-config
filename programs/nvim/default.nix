@@ -28,6 +28,7 @@
 
     prettier
     stylua
+    alejandra
     black
     isort
     eslint_d
