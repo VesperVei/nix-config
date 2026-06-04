@@ -1,8 +1,4 @@
-{ pkgs, ... }:
-
-{
-  xdg.configFile."yazi".source = ./config;
-
+{pkgs, ...}: {
   home.packages = with pkgs; [
     yazi
     fd
@@ -17,4 +13,11 @@
     exiftool
     mediainfo
   ];
+  programs.yazi = {
+    enable = true;
+    enableZshIntegration = true;
+
+    settings = import ./settings.nix;
+    keymap = import ./keymaps.nix;
+  };
 }
