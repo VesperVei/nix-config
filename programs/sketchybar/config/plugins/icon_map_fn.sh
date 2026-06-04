@@ -430,7 +430,7 @@ function icon_map() {
     ;;
   esac
 }
-if [ ! -z "$1" ]; then
+if [[ "${BASH_SOURCE[0]}" == "$0" && -n "$1" ]]; then
   icon_map "$1"
   echo "$icon_result"
 fi

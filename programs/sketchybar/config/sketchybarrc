@@ -1,4 +1,4 @@
-# !/bin/bash
+#!/bin/bash
 source "$CONFIG_DIR/colors.sh" # Loads all defined colors
 # This is a demo config to showcase some of the most important commands.
 # It is meant to be changed and configured, as it is intentionally kept sparse.
@@ -41,10 +41,10 @@ default=(
   label.padding_right=4
 )
 sketchybar --default "${default[@]}"
+sketchybar --add event aerospace_workspace_change
+
 # -- 左侧主题配置 --
-# source $ITEM_DIR/spaces.sh
 source $ITEM_DIR/spaces_aero.sh
-# source $ITEM_DIR/front_app.sh #图标自动获取脚本
 ###  右边的主题配置 --------
 source $ITEM_DIR/calendars.sh  ##加载ltems文件夹下的calendars文件
 source $ITEM_DIR/battery.sh
@@ -54,4 +54,3 @@ source $ITEM_DIR/cpu.sh
 source $ITEM_DIR/front_app.sh #图标自动获取脚本
 ##### Force all scripts to run the first time (never do this in a script) #####
 sketchybar --update
-sketchybar --add event aerospace_workspace_change
