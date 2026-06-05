@@ -9,5 +9,6 @@
     ../../programs/sketchybar
     ../../programs/kitty
     ../../programs/zsh
+    ../../programs/eza
   ];
 }

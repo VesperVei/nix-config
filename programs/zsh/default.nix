@@ -16,7 +16,6 @@
 in {
   home.packages = with pkgs; [
     bat
-    eza
     fnm
     uv
   ];
@@ -31,9 +30,6 @@ in {
     # 别名
     shellAliases = {
       v = "nvim";
-      ls = "eza --icons=always";
-      ll = "eza -lah --icons=always";
-      la = "eza -a --icons=always";
       cat = "bat --paging=never --style=plain";
     };
 
