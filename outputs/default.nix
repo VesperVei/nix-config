@@ -28,8 +28,10 @@
   };
 
   darwin = import ./aarch64-darwin args;
+  linux = import ./x86_64-linux args;
 in {
   homeConfigurations = lib.attrsets.mergeAttrsList [
     (darwin.homeConfigurations or {})
+    (linux.homeConfigurations or {})
   ];
 }
