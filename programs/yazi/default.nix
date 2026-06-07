@@ -18,9 +18,14 @@
     enableZshIntegration = true;
     # keymaps文件依赖
     plugins = {
+      "piper" = pkgs.yaziPlugins.piper;
       "smart-enter" = pkgs.yaziPlugins.smart-enter;
     };
-    settings = import ./settings.nix;
+    settings = import ./settings.nix {inherit pkgs;};
     keymap = import ./keymaps.nix;
+    theme = builtins.fromTOML (builtins.readFile ./config/theme.toml);
+    flavors = {
+      "catppuccin-mocha" = ./config/flavors/catppuccin-mocha.yazi;
+    };
   };
 }
