@@ -4,6 +4,14 @@
   ...
 } @ inputs: let
   inherit (inputs.nixpkgs) lib;
+  mylib = import ../lib {inherit lib;};
+
+  # outputs/default.nix
+  genSpecialArgs = system:
+    inputs
+    // {
+      inherit mylib;
+    };
 
   mkHome = {
     system,
@@ -13,6 +21,8 @@
   }:
     home-manager.lib.homeManagerConfiguration {
       pkgs = nixpkgs.legacyPackages.${system};
+
+      extraSpecialArgs = genSpecialArgs system;
 
       modules = [
         modulePath
@@ -24,7 +34,7 @@
     };
 
   args = {
-    inherit inputs lib mkHome;
+    inherit inputs lib mkHome mylib genSpecialArgs;
   };
 
   darwin = import ./aarch64-darwin args;
