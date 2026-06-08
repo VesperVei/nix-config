@@ -1,31 +1,18 @@
 {
   description = "Whiteboard user Home Manager config";
+  nixConfig = {
+    extra-substituters = [
+      "https://mirrors.ustc.edu.cn/nix-channels/store"
+      "https://cache.nixos.org"
+    ];
+  };
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
-    home-manager.url = "github:nix-community/home-manager/master";
+    home-manager.url = "github:nix-community/home-manager/release-26.05";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { nixpkgs, home-manager, ... }:
-  let
-    system = "aarch64-darwin";
-    username = "zaochuan";
-    homeDirectory = "/Users/${username}";
-    hostname = "macbook";
-  in {
-    homeConfigurations."${username}@${hostname}" = home-manager.lib.homeManagerConfiguration {
-      pkgs = nixpkgs.legacyPackages.${system};
-
-      modules = [
-        ./systems/darwin/macbook.nix
-        {
-          home.username = username;
-          home.homeDirectory = homeDirectory;
-        }
-      ];
-    };
-  };
+  outputs = inputs: import ./outputs inputs;
 }
-

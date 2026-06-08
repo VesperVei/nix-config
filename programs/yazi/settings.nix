@@ -1,4 +1,4 @@
-{
+{pkgs}: {
   mgr = {
     ratio = [2 4 3];
     sort-by = "alphabetical";
@@ -30,8 +30,8 @@
   opener = {
     edit = [
       {
-        run = "\${EDITOR:-vi} %s";
-        desc = "$EDITOR";
+        run = "${pkgs.neovim}/bin/nvim %s";
+        desc = "nvim";
         for = "unix";
         block = true;
       }
@@ -315,7 +315,7 @@
     previewers = [
       {
         url = "*/";
-        run = "folder";
+        run = ''piper -- ${pkgs.eza}/bin/eza -TL=3 --color=always --icons=always --group-directories-first --no-quotes "$1"'';
       }
       {
         mime = "text/*";
