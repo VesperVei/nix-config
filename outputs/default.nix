@@ -5,12 +5,13 @@
 } @ inputs: let
   inherit (inputs.nixpkgs) lib;
   mylib = import ../lib {inherit lib;};
+  myvars = import ../vars {inherit lib;};
 
   # outputs/default.nix
   genSpecialArgs = system:
     inputs
     // {
-      inherit mylib;
+      inherit mylib myvars;
     };
 
   mkHome = {
