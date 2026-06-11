@@ -35,7 +35,7 @@
     };
 
   args = {
-    inherit inputs lib mkHome mylib genSpecialArgs;
+    inherit inputs lib mkHome mylib myvars genSpecialArgs;
   };
 
   darwin = import ./aarch64-darwin args;
@@ -44,5 +44,9 @@ in {
   homeConfigurations = lib.attrsets.mergeAttrsList [
     (darwin.homeConfigurations or {})
     (linux.homeConfigurations or {})
+  ];
+  darwinConfigurations = lib.attrsets.mergeAttrsList [
+    (darwin.darwinConfigurations or {})
+    (linux.darwinConfigurations or {})
   ];
 }
