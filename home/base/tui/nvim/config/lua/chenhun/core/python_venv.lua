@@ -61,6 +61,11 @@ local function file_exists(path)
 	return false
 end
 
+local function is_directory(path)
+	local stat = vim.uv.fs_stat(path)
+	return stat and stat.type == "directory"
+end
+
 local function normalize_path(path)
 	if not path or path == "" then
 		return nil
@@ -147,12 +152,23 @@ local function build_pyright_python_settings(state)
 		pythonPath = state.python_path,
 	}
 
-	if state.venv_name then
+	if state.venv_path and state.local_venv then
+		python_settings.venvPath = vim.fs.dirname(state.venv_path)
+		python_settings.venv = vim.fs.basename(state.venv_path)
+	elseif state.venv_name then
 		python_settings.venvPath = config.venv_root
 		python_settings.venv = state.venv_name
 	end
 
 	return python_settings
+end
+
+local function display_venv_name(state)
+	if state.local_venv and state.venv_path then
+		return vim.fs.basename(state.venv_path)
+	end
+
+	return state.venv_name
 end
 
 local function is_client_in_state_scope(client, state)
@@ -217,26 +233,88 @@ local function resolve_project_root(path)
 	return nil
 end
 
+-- 解释器选择优先级：
+-- 1. 手动 `<leader>pv` / `set_venv()` 覆盖当前项目
+-- 2. 项目根目录中的 `.pyvenv` 声明文件，内容只写 venv 名字
+-- 3. 项目本地 `.venv/` 目录
+-- 4. `python_venv_map.lua` 里的显式映射
+-- 5. 系统解释器
+-- `.pyvenv` 只存“名字”，例如 `pwn`，最终会去 `config.venv_root` 下找对应环境。
+-- `.venv` 目录则表示项目本地环境，Neovim 会直接使用该目录下的 `bin/python`。
+local function read_declared_venv_name(path)
+	local directory = path_to_directory(path)
+	if not directory then
+		return nil
+	end
+
+	local declaration_path = vim.fs.find(".pyvenv", {
+		path = directory,
+		upward = true,
+		limit = 1,
+	})[1]
+	if not declaration_path then
+		return nil
+	end
+
+	local lines = vim.fn.readfile(declaration_path)
+	local declared = vim.trim(lines[1] or "")
+	if declared == "" then
+		return nil
+	end
+
+	return declared
+end
+
+local function resolve_local_venv_name(path)
+	local directory = path_to_directory(path)
+	if not directory then
+		return nil
+	end
+
+	local current = directory
+	while current and current ~= "/" do
+		local venv_dir = current .. "/.venv"
+		if is_directory(venv_dir) and file_exists(venv_dir .. "/bin/python") then
+			return venv_dir
+		end
+
+		current = vim.fs.dirname(current)
+		if current == directory then
+			break
+		end
+	end
+
+	return nil
+end
+
 local function resolve_venv_name(path)
 	local project_root = resolve_project_root(path)
-	if not project_root then
-		if cache.manual_fallback == "system" then
-			return nil, nil
+	if project_root then
+		local override = cache.project_overrides[project_root]
+		if override == "system" then
+			return nil, project_root
 		end
-
-		if cache.manual_fallback and cache.manual_fallback ~= "" then
-			return cache.manual_fallback, nil
+		if override and override ~= "" then
+			return override, project_root
 		end
-
+	elseif cache.manual_fallback == "system" then
 		return nil, nil
+	elseif cache.manual_fallback and cache.manual_fallback ~= "" then
+		return cache.manual_fallback, nil
 	end
 
-	local override = cache.project_overrides[project_root]
-	if override == "system" then
-		return nil, project_root
+	local declared_venv = read_declared_venv_name(path)
+	if declared_venv then
+		return declared_venv, project_root
 	end
-	if override and override ~= "" then
-		return override, project_root
+
+	local local_venv = resolve_local_venv_name(path)
+	if local_venv then
+		return local_venv, project_root
+	end
+
+	if not project_root then
+		return nil, nil
 	end
 
 	return project_venv_map[project_root], project_root
@@ -254,10 +332,18 @@ local function build_state_for_path(path)
 			venv_name = nil,
 			python_path = config.default_bin,
 			venv_path = nil,
+			local_venv = false,
 		}
 	end
 
+	local venv_path = get_venv_path(venv_name)
+	local local_venv = false
 	local python_bin = get_python_bin(venv_name)
+	if venv_name:sub(1, 1) == "/" then
+		venv_path = venv_name
+		python_bin = venv_path .. "/bin/python"
+		local_venv = true
+	end
 	if not file_exists(python_bin) then
 		return {
 			project_root = project_root,
@@ -265,6 +351,7 @@ local function build_state_for_path(path)
 			venv_name = nil,
 			python_path = config.default_bin,
 			venv_path = nil,
+			local_venv = false,
 		}
 	end
 
@@ -273,7 +360,8 @@ local function build_state_for_path(path)
 		target_dir = target_dir,
 		venv_name = venv_name,
 		python_path = python_bin,
-		venv_path = get_venv_path(venv_name),
+		venv_path = venv_path,
+		local_venv = local_venv,
 	}
 end
 
@@ -309,7 +397,7 @@ local function apply_state(state, opts)
 	end
 
 	if opts.notify and state.venv_name and changed then
-		vim.notify(config.icon .. "已激活环境: " .. state.venv_name, vim.log.levels.INFO)
+		vim.notify(config.icon .. "已激活环境: " .. (display_venv_name(state) or state.venv_name), vim.log.levels.INFO)
 		if state.project_root then
 			cache.notified_projects[state.project_root] = state.venv_name
 		end
@@ -451,7 +539,7 @@ function M.on_pyright_attach(bufnr)
 	if state.venv_name and state.project_root then
 		local last_notified = cache.notified_projects[state.project_root]
 		if last_notified ~= state.venv_name then
-			vim.notify(config.icon .. "已激活环境: " .. state.venv_name, vim.log.levels.INFO)
+			vim.notify(config.icon .. "已激活环境: " .. (display_venv_name(state) or state.venv_name), vim.log.levels.INFO)
 			cache.notified_projects[state.project_root] = state.venv_name
 		end
 	end
@@ -474,7 +562,11 @@ function M.lualine_component()
 	if not cache.current or cache.current == "" then
 		return ""
 	end
-	return config.icon .. cache.current
+	local current = cache.current
+	if cache.current:sub(1, 1) == "/" then
+		current = vim.fs.basename(cache.current)
+	end
+	return config.icon .. current
 end
 
 local function close_status_window()

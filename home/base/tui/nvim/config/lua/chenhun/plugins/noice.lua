@@ -136,7 +136,7 @@ return {
         },
       },
       lsp = {
-        progress = { enabled = true },
+        progress = { enabled = false },
         hover = {
           enabled = true,
           view = "hover_popup",

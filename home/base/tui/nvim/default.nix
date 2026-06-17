@@ -11,6 +11,7 @@
     neovim
 
     git
+    lazygit
     ripgrep
     fd
     tree-sitter
