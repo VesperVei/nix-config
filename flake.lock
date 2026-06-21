@@ -192,10 +192,10 @@
     "mysecrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1782038345,
-        "narHash": "sha256-fHgBGx4ZxGGLbnKzhaH+lhSG/CedPT1L3GGCPcwaBZs=",
+        "lastModified": 1782039274,
+        "narHash": "sha256-MMEzFvwuJdVLIGmYOg6HTE9bjXdKuE2CHm48kMN/0PE=",
         "ref": "main",
-        "rev": "bd108765efb44d40d321deb74871feefbe931f3b",
+        "rev": "d243d21707bbbbb7fd978d47af8ffaa52bb076cf",
         "shallow": true,
         "type": "git",
         "url": "ssh://git@github.com/VesperVei/nix-secrets.git"

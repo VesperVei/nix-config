@@ -1,5 +1,8 @@
 {
   agenix,
+  config,
+  mysecrets,
+  myvars,
   pkgs,
   ...
 }: {
@@ -14,4 +17,19 @@
   age.identityPaths = [
     "/etc/ssh/ssh_host_ed25519_key"
   ];
+
+  age.secrets = let
+    user_readable = {
+      mode = "0500";
+      owner = myvars.username;
+    };
+  in {
+    "ai-cli-api-keys.zsh" = {
+      file = "${mysecrets}/ai-cli-api-keys.zsh.age";
+    } // user_readable;
+  };
+
+  environment.etc."agenix/ai-cli-api-keys.zsh" = {
+    source = config.age.secrets."ai-cli-api-keys.zsh".path;
+  };
 }
