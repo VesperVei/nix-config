@@ -23,6 +23,9 @@
       url = "github:nix-darwin/nix-darwin/nix-darwin-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    llm-agents.url = "github:numtide/llm-agents.nix";
+
   };
 
   outputs = inputs: import ./outputs inputs;
