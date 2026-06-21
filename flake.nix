@@ -24,7 +24,17 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    agenix = {
+      url = "github:ryantm/agenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     llm-agents.url = "github:numtide/llm-agents.nix";
+
+    mysecrets = {
+      url = "git+ssh://git@github.com/VesperVei/nix-secrets.git?ref=main&shallow=1";
+      flake = false;
+    };
 
   };
 

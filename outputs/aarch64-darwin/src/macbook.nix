@@ -17,6 +17,7 @@
     system = myvars.darwinSystem;
     specialArgs = genSpecialArgs myvars.darwinSystem;
     modules = [
+      (mylib.relativeToRoot "secrets/darwin.nix")
       (mylib.relativeToRoot "modules/darwin")
       (mylib.relativeToRoot "hosts/darwin-${myvars.darwinHostName}")
     ];
