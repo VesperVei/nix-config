@@ -8,7 +8,6 @@ return {
     "typescriptreact",
     "tsx",
     "jsx",
-    "svelte",
   },
   config = function()
     -- 独立配置 nvim-ts-autotag，避免继续依赖 nvim-treesitter.configs 中已过时的 autotag 接法。

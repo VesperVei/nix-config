@@ -255,9 +255,7 @@ return {
 			"ts_ls",
 			"html",
 			"cssls",
-			"graphql",
 			"emmet_ls",
-			"svelte",
 			"bashls",
 			"jsonls",
 		}

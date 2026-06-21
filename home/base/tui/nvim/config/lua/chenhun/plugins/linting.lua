@@ -9,7 +9,6 @@ return {
 			typescript = { "eslint_d" },
 			javascriptreact = { "eslint_d" },
 			typescriptreact = { "eslint_d" },
-			svelte = { "eslint_d" },
 			-- ✅ 已禁用 pylint，现在 Python 的诊断完全由 pyright 负责
 			python = {},
 		}
