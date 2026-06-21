@@ -10,7 +10,7 @@
     ++ (with llm-agents.packages.${pkgs.stdenv.hostPlatform.system}; [
       # Agents
       codex
-      cursor-cli
+      # cursor-cli
       claude-code
       opencode
 
