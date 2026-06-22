@@ -65,6 +65,9 @@ in {
         #自动注入所有scripts目录下的脚本
         ${sourceModules}
 
+        # 加载 agenix 管理的 AI CLI API keys
+        [[ ! -r /etc/agenix/ai-cli-api-keys.zsh ]] || source /etc/agenix/ai-cli-api-keys.zsh
+
         # 工具链初始化
         eval "$(uv generate-shell-completion zsh)"
         eval "$(fnm env --use-on-cd)"
