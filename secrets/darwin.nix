@@ -29,7 +29,4 @@
     } // user_readable;
   };
 
-  environment.etc."agenix/ai-cli-api-keys.zsh" = {
-    source = config.age.secrets."ai-cli-api-keys.zsh".path;
-  };
 }

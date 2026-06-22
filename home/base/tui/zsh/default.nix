@@ -66,7 +66,7 @@ in {
         ${sourceModules}
 
         # 加载 agenix 管理的 AI CLI API keys
-        [[ ! -r /etc/agenix/ai-cli-api-keys.zsh ]] || source /etc/agenix/ai-cli-api-keys.zsh
+        [[ ! -r /run/agenix/ai-cli-api-keys.zsh ]] || source /run/agenix/ai-cli-api-keys.zsh
 
         # 工具链初始化
         eval "$(uv generate-shell-completion zsh)"
