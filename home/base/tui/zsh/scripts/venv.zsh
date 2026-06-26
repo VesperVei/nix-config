@@ -16,7 +16,11 @@ NC='\033[0m'
 # 主函数：交互式虚拟环境管理器
 function va() {
     # 获取所有虚拟环境
-    local envs=($(ls "$VENV_DIR" 2>/dev/null))
+    local envs=()
+    local env_path
+    for env_path in "$VENV_DIR"/*(/N); do
+        envs+=("${env_path:t}")
+    done
     local env_count=${#envs[@]}
     
     if [ $env_count -eq 0 ]; then
@@ -86,7 +90,10 @@ function va() {
             
             if [ $selected_index -ge 1 ] && [ $selected_index -le $env_count ]; then
                 local selected_env="${envs[$selected_index]}"
-                source "$VENV_DIR/$selected_env/bin/activate"
+                if ! source "$VENV_DIR/$selected_env/bin/activate"; then
+                    echo -e "${RED}❌ 激活失败: $selected_env${NC}"
+                    return 1
+                fi
                 echo -e "${GREEN}✅ 成功激活: $selected_env${NC}"
                 echo -e "   ${YELLOW}Python:${NC} $(which python)"
                 return 0
