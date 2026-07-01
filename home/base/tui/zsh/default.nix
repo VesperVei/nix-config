@@ -3,21 +3,26 @@
   pkgs,
   lib,
   ...
-}: let
+}:
+let
   # 1. 定义脚本目录
   scriptDir = ./scripts;
 
   # 2. 自动获取目录下所有以 .zsh 结尾的文件，并生成 source 语句
   # 过滤掉 init.zsh 本身（如果你还保留它的话）
-  customModules = builtins.attrNames (lib.filterAttrs
-    (name: type: type == "regular" && lib.hasSuffix ".zsh" name)
-    (builtins.readDir scriptDir));
+  customModules = builtins.attrNames (
+    lib.filterAttrs (name: type: type == "regular" && lib.hasSuffix ".zsh" name) (
+      builtins.readDir scriptDir
+    )
+  );
   sourceModules = lib.concatMapStringsSep "\n" (name: "source ${scriptDir}/${name}") customModules;
-in {
+in
+{
   home.packages = with pkgs; [
     bat
     fnm
     uv
+    ffmpeg # Tool's editing Video and Audio
   ];
 
   programs.zsh = {
@@ -35,7 +40,10 @@ in {
 
     oh-my-zsh = {
       enable = true;
-      plugins = ["git" "web-search"];
+      plugins = [
+        "git"
+        "web-search"
+      ];
     };
     # 自动管理语法高亮和自动补全（无需手动克隆）
     enableCompletion = true;
