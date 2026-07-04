@@ -1,4 +1,6 @@
 {lib, ...}: {
+  macosSystem = import ./macosSystem.nix;
+
   relativeToRoot = lib.path.append ../.;
 
   scanPaths = path:
