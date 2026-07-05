@@ -1,6 +1,6 @@
 {lib, ...} @ args: let
   data = [
-    (import ./src/vespervei.nix args)
+    (import ./src/ctf-pwn.nix args)
   ];
 in {
   homeConfigurations = lib.attrsets.mergeAttrsList (

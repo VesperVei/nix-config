@@ -3,5 +3,5 @@
     ../../linux/tui.nix
   ];
 
-  xdg.configFile."tmux/tmux.conf".source = lib.mkForce ./ubuntu-chun/tmux.conf;
+  xdg.configFile."tmux/tmux.conf".source = lib.mkForce ./special/tmux.conf;
 }
