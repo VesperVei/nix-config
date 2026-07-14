@@ -33,15 +33,15 @@ setup_fake_macos_tools() {
 set -euo pipefail
 
 expr="${2:-}"
-app="${expr#application \"}"
-app="${app%\" is running}"
+bundle_id="${expr#application id \"}"
+bundle_id="${bundle_id%\" is running}"
 
-while IFS= read -r running_app; do
-  if [[ "$running_app" == "$app" ]]; then
+while IFS= read -r running_bundle_id; do
+  if [[ "$running_bundle_id" == "$bundle_id" ]]; then
     printf 'true\n'
     exit 0
   fi
-done <<< "${RUNNING_APPS:-}"
+done <<< "${RUNNING_BUNDLE_IDS:-}"
 
 printf 'false\n'
 EOF
@@ -50,7 +50,7 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${1:-}" != "-a" || -z "${2:-}" ]]; then
+if [[ "${1:-}" != "-b" || -z "${2:-}" ]]; then
   printf 'unexpected open args: %s\n' "$*" >&2
   exit 64
 fi
@@ -90,21 +90,21 @@ test_unknown_mode_does_not_open_apps() {
 test_node_mode_opens_obsidian_and_netease_music() {
   setup_fake_macos_tools
   trap teardown_fake_macos_tools RETURN
-  export RUNNING_APPS=''
+  export RUNNING_BUNDLE_IDS=''
 
   run_desktop_mode node
 
-  assert_eq $'Obsidian\nNetEaseMusic' "$(cat "$OPEN_LOG")" 'node mode should open both apps'
+  assert_eq $'md.obsidian\ncom.netease.163music' "$(cat "$OPEN_LOG")" 'node mode should open both apps by bundle id'
 }
 
 test_node_mode_skips_apps_that_are_already_running() {
   setup_fake_macos_tools
   trap teardown_fake_macos_tools RETURN
-  export RUNNING_APPS='Obsidian'
+  export RUNNING_BUNDLE_IDS='md.obsidian'
 
   run_desktop_mode node
 
-  assert_eq 'NetEaseMusic' "$(cat "$OPEN_LOG")" 'node mode should skip running apps'
+  assert_eq 'com.netease.163music' "$(cat "$OPEN_LOG")" 'node mode should skip running apps by bundle id'
 }
 
 test_unknown_mode_does_not_open_apps

@@ -6,23 +6,23 @@ usage() {
 }
 
 is_running() {
-  local app_name="$1"
-  [[ "$(osascript -e "application \"${app_name}\" is running")" == "true" ]]
+  local bundle_id="$1"
+  [[ "$(osascript -e "application id \"${bundle_id}\" is running")" == "true" ]]
 }
 
 open_if_not_running() {
-  local app_name="$1"
+  local bundle_id="$1"
 
-  if is_running "$app_name"; then
+  if is_running "$bundle_id"; then
     return 0
   fi
 
-  open -a "$app_name"
+  open -b "$bundle_id"
 }
 
 node_mode() {
-  open_if_not_running "Obsidian"
-  open_if_not_running "NetEaseMusic"
+  open_if_not_running "md.obsidian"
+  open_if_not_running "com.netease.163music"
 }
 
 main() {
