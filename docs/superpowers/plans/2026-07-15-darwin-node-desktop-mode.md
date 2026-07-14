@@ -50,8 +50,8 @@
 - `node` mode app list:
   - `Obsidian`
   - `NetEaseMusic`
-- Uses `osascript -e 'application "<app>" is running'` to detect running apps.
-- Uses `open -a "<app>"` only for apps reported as not running.
+- Uses `osascript -e 'application id "<bundle-id>" is running'` to detect running apps.
+- Uses `open -b "<bundle-id>"` only for apps reported as not running.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -59,8 +59,8 @@ Create `tests/desktop-mode.sh` with tests that fake `osascript` and `open` via `
 
 Expected tested behavior:
 - Unknown modes exit non-zero and do not open apps.
-- `node` opens Obsidian and NetEase Music when both are not running.
-- `node` skips Obsidian when already running and still opens NetEase Music.
+- `node` opens `md.obsidian` and `com.netease.163music` when both are not running.
+- `node` skips `md.obsidian` when already running and still opens `com.netease.163music`.
 
 - [ ] **Step 2: Run tests to verify RED**
 
@@ -81,23 +81,23 @@ usage() {
 }
 
 is_running() {
-  local app_name="$1"
-  [[ "$(osascript -e "application \"${app_name}\" is running")" == "true" ]]
+  local bundle_id="$1"
+  [[ "$(osascript -e "application id \"${bundle_id}\" is running")" == "true" ]]
 }
 
 open_if_not_running() {
-  local app_name="$1"
+  local bundle_id="$1"
 
-  if is_running "$app_name"; then
+  if is_running "$bundle_id"; then
     return 0
   fi
 
-  open -a "$app_name"
+  open -b "$bundle_id"
 }
 
 node_mode() {
-  open_if_not_running "Obsidian"
-  open_if_not_running "NetEaseMusic"
+  open_if_not_running "md.obsidian"
+  open_if_not_running "com.netease.163music"
 }
 
 main() {
@@ -160,7 +160,7 @@ in
 In `home/darwin/aerospace/config/aerospace.toml`, add under `[mode.service.binding]`:
 
 ```toml
-n = ['exec-and-forget desktop-mode node', 'mode main']
+n = ['exec-and-forget /bin/zsh -lc "desktop-mode node"', 'mode main']
 ```
 
 - [ ] **Step 3: Document current workflow if needed**
@@ -190,4 +190,4 @@ Review:
 
 - Spec coverage: node mode, service binding, idempotent app open behavior, existing routing preservation, and batched commits are covered.
 - Placeholder scan: no deferred implementation placeholders remain.
-- Type consistency: command name is consistently `desktop-mode`; mode name is consistently `node`; apps are consistently `Obsidian` and `NetEaseMusic`.
+- Type consistency: command name is consistently `desktop-mode`; mode name is consistently `node`; apps are consistently `md.obsidian` and `com.netease.163music`.
