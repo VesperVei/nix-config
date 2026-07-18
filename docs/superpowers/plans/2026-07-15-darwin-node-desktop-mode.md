@@ -191,3 +191,11 @@ Review:
 - Spec coverage: node mode, service binding, idempotent app open behavior, existing routing preservation, and batched commits are covered.
 - Placeholder scan: no deferred implementation placeholders remain.
 - Type consistency: command name is consistently `desktop-mode`; mode name is consistently `node`; apps are consistently `md.obsidian` and `com.netease.163music`.
+
+## Follow-up Scope Added Later
+
+This plan was later extended in the same desktop-mode family to cover a `pwn` service-mode entry and the darwin startup flow for AeroSpace and SketchyBar:
+
+- `desktop-mode pwn` opens UTM, kitty, IDA, and Finder, and stops with a missing-app error if any required app is absent.
+- AeroSpace is launched automatically at login from the darwin/Home Manager layer.
+- AeroSpace runs `sketchybar --reload` after startup so the bar does not require a manual reload once AeroSpace is available.
