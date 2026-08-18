@@ -1,6 +1,7 @@
-{pkgs, llm-agents, ...}: {
+{ pkgs, llm-agents, ... }:
+{
   imports = [
-    ../../linux/tui.nix
+    ../../linux/low_config.nix
   ];
 
   home.packages = [
