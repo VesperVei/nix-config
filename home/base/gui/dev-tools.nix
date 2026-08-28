@@ -5,6 +5,7 @@
     [
       mitmproxy # http/https proxy tool
       wireshark # network analyzer
+      ollama # local model runner for offline use
     ]
     # AI Agent Tools
     ++ (with llm-agents.packages.${pkgs.stdenv.hostPlatform.system}; [
