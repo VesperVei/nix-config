@@ -23,6 +23,8 @@ in
     fnm
     uv
     ffmpeg # Tool's editing Video and Audio
+    qemu
+    binwalk
   ];
 
   programs.zsh = {
