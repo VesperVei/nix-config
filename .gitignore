@@ -16,3 +16,5 @@ result-*
 # Neovim local/private config
 programs/nvim/config/lua/chenhun/core/python_venv_map.lua
 
+# Local deployment helpers
+deploy-alyu24-local.sh
