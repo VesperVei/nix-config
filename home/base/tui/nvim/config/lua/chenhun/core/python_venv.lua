@@ -19,6 +19,8 @@ local cache = {
 }
 
 local status_view = { buf = nil, win = nil }
+local status_ns = vim.api.nvim_create_namespace("PythonVenvStatus")
+vim.api.nvim_set_hl(0, "PythonStatusNumber", { fg = "#ff9e64", bold = true })
 
 local function normalize(path)
   if not path or path == "" then return nil end
@@ -63,6 +65,12 @@ end
 
 local function in_scope(path, root)
   return path == root or path:sub(1, #root + 1) == root .. "/"
+end
+
+local function is_tree_window(winid)
+  local bufnr = vim.api.nvim_win_get_buf(winid)
+  return vim.bo[bufnr].filetype == "NvimTree"
+    or vim.api.nvim_buf_get_name(bufnr):match("NvimTree") ~= nil
 end
 
 local function get_current_path()
@@ -124,7 +132,7 @@ end
 
 local function validate(value)
   local path
-  if value == "system" or value == nil or value == "" then return record("system") end
+  if value == "system" or value == nil then return record("system") end
   if value:sub(1, 1) == "/" then
     path = normalize(value)
     if not path or not is_directory(path) then
@@ -137,6 +145,10 @@ local function validate(value)
     return record("system")
   else
     path = normalize(config.venv_root .. "/" .. value)
+    if vim.fs.dirname(path) ~= normalize(config.venv_root) then
+      warn_broken("invalid:" .. value, path)
+      return record("system")
+    end
   end
   local result = record(value:sub(1, 1) == "/" and "local" or "shared", value:sub(1, 1) == "/" and ".venv" or value, path)
   if not is_usable_python(result.python_path) then
@@ -280,6 +292,9 @@ function M.set_venv(value, opts)
   opts = vim.tbl_extend("force", { path = get_current_path() }, opts or {})
   local root = resolve_project_root(opts.path)
   local local_path = find_local_venv(opts.path)
+  if value ~= nil and value ~= "system" and (type(value) ~= "string" or value == "" or value:sub(1, 1) ~= "/" and not is_shared_name(value)) then
+    return false
+  end
   if value and value:sub(1, 1) == "/" and (not local_path or normalize(value) ~= local_path) then
     return false
   end
@@ -314,8 +329,11 @@ function M.choose_venv()
   local choices = list_choices(get_current_path())
   local labels, by_label = {}, {}
   for index, choice in ipairs(choices) do
-    local label = config.icon .. (choice.kind == "local" and "local: .venv" or choice.kind == "shared" and "shared: " .. choice.name or "system")
-    if choice.kind == "broken" then label = label .. " (broken)" end
+    local label = config.icon
+      .. (choice.kind == "local" and "local: .venv (" .. choice.path .. ")"
+        or choice.kind == "shared" and "shared: " .. choice.name .. " (" .. choice.path .. ")"
+        or choice.kind == "broken" and "broken: " .. (choice.name or ".venv") .. " (" .. choice.path .. ")"
+        or "system")
     labels[index], by_label[label] = label, choice
   end
   vim.ui.select(labels, { prompt = "Select Python environment: " }, function(label)
@@ -347,11 +365,10 @@ local function close_status_window()
   status_view.win, status_view.buf = nil, nil
 end
 
-function M.show_session_status()
-  if status_view.win and vim.api.nvim_win_is_valid(status_view.win) then close_status_window(); return end
+local function build_session_lines()
   local visible_windows, python_buffers = 0, 0
   for _, winid in ipairs(vim.api.nvim_list_wins()) do
-    if vim.api.nvim_win_is_valid(winid) then visible_windows = visible_windows + 1 end
+    if vim.api.nvim_win_is_valid(winid) and not is_tree_window(winid) then visible_windows = visible_windows + 1 end
   end
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].filetype == "python" then python_buffers = python_buffers + 1 end
@@ -378,16 +395,39 @@ function M.show_session_status()
     table.insert(lines, "    Python: " .. shorten_path(settings.pythonPath or config.default_bin))
   end
   if #clients == 0 then table.insert(lines, "    No active Pyright client") end
+  return lines
+end
+
+local function highlight_status_buffer(buf, lines)
+  vim.api.nvim_buf_clear_namespace(buf, status_ns, 0, -1)
+  for row, line in ipairs(lines) do
+    local colon = line:find(":")
+    if row == 1 then
+      vim.api.nvim_buf_add_highlight(buf, status_ns, "Title", row - 1, 0, -1)
+    elseif colon then
+      vim.api.nvim_buf_add_highlight(buf, status_ns, "Identifier", row - 1, 2, colon - 1)
+    end
+  end
+end
+
+function M.show_session_status()
+  if status_view.win and vim.api.nvim_win_is_valid(status_view.win) then close_status_window(); return end
+  local lines = build_session_lines()
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[buf].bufhidden, vim.bo[buf].modifiable = "wipe", true
+  vim.bo[buf].bufhidden, vim.bo[buf].filetype, vim.bo[buf].modifiable = "wipe", "pythonvenvstatus", true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
+  highlight_status_buffer(buf, lines)
   local width = 0
   for _, line in ipairs(lines) do width = math.max(width, vim.fn.strdisplaywidth(line)) end
   width = math.min(math.max(width + 4, 72), math.max(vim.o.columns - 8, 60))
   local height = math.min(#lines + 2, math.max(vim.o.lines - 6, 12))
   local win = vim.api.nvim_open_win(buf, true, { relative = "editor", width = width, height = height, row = math.floor((vim.o.lines - height) / 2) - 1, col = math.floor((vim.o.columns - width) / 2), style = "minimal", border = "rounded", title = " Python / LSP status ", title_pos = "center" })
   status_view.buf, status_view.win = buf, win
+  vim.wo[win].wrap, vim.wo[win].linebreak = true, true
+  vim.wo[win].cursorline, vim.wo[win].number = false, false
+  vim.wo[win].relativenumber, vim.wo[win].signcolumn = false, "no"
+  vim.wo[win].winhighlight = "NormalFloat:Normal,FloatBorder:FloatBorder,FloatTitle:Title"
   vim.keymap.set("n", "q", close_status_window, { buffer = buf, nowait = true, silent = true })
   vim.keymap.set("n", "<Esc>", close_status_window, { buffer = buf, nowait = true, silent = true })
 end
@@ -396,6 +436,7 @@ M._test = {
   resolve_project_root = resolve_project_root,
   resolve_state = function(path, opts) return resolve_state(path, opts) end,
   list_choices = list_choices,
+  session_lines = build_session_lines,
 }
 
 M.autoset_venv({ path = vim.fn.getcwd(), notify = false, restart = false })

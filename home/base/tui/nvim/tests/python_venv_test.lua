@@ -174,6 +174,14 @@ local manual_state = test_api.resolve_state(project .. "/nested/package/main.py"
 assert_equal(manual_state.kind, "shared", "manual environment kind")
 assert_equal(manual_state.name, "manual", "manual override priority")
 
+local before_invalid = test_api.resolve_state(project .. "/nested/package/main.py")
+for _, invalid_name in ipairs({ "", "/tmp/outside", "../manual", "nested/name" }) do
+  assert_equal(python_venv.set_venv(invalid_name, { path = project .. "/nested/package/main.py" }), false, "reject invalid set " .. invalid_name)
+  local after_invalid = test_api.resolve_state(project .. "/nested/package/main.py")
+  assert_equal(after_invalid.kind, before_invalid.kind, "invalid set keeps kind " .. invalid_name)
+  assert_equal(after_invalid.path, before_invalid.path, "invalid set keeps path " .. invalid_name)
+end
+
 local system_state = test_api.resolve_state(project .. "/nested/package/main.py", { manual = "system" })
 assert_equal(system_state.kind, "system", "system environment kind")
 assert_nil(system_state.name, "system environment name")
@@ -258,6 +266,17 @@ python_venv.choose_venv()
 vim.ui.select = original_select
 assert_equal(test_api.resolve_state(nearest_project .. "/src/deep/main.py").path, nearest_project .. "/src/.venv", "nested chooser selects local")
 
+vim.api.nvim_buf_set_name(0, project .. "/nested/package/main.py")
+vim.ui.select = function(items, _, callback)
+  for _, item in ipairs(items) do
+    if item:find(venv_root .. "/broken", 1, true) then callback(item); return end
+  end
+  fail("broken chooser entries are not uniquely labeled")
+end
+python_venv.choose_venv()
+vim.ui.select = original_select
+assert_equal(test_api.resolve_state(project .. "/nested/package/main.py").kind, "local", "broken chooser does not suppress local")
+
 local parent_client = { name = "pyright", config = { root_dir = nested_scope_parent, settings = { python = { pythonPath = "parent" } } }, settings = {} }
 local child_client = { name = "pyright", config = { root_dir = nested_scope_child, settings = { python = { pythonPath = "child" } } }, settings = {} }
 parent_client.notify, child_client.notify = function() end, function() end
@@ -283,5 +302,13 @@ assert_true(python_venv.set_venv("manual", { path = standalone }), "set standalo
 assert_equal(test_api.resolve_state(standalone).name, "manual", "standalone fallback applies")
 assert_equal(test_api.resolve_state(standalone_other).kind, "system", "standalone fallback does not leak")
 assert_true(python_venv.set_venv("system", { path = standalone }), "clear standalone fallback")
+
+local tree_buf = vim.api.nvim_create_buf(false, true)
+vim.bo[tree_buf].filetype = "NvimTree"
+local tree_win = vim.api.nvim_open_win(tree_buf, false, { relative = "editor", width = 10, height = 3, row = 0, col = 0, style = "minimal" })
+local status_lines = test_api.session_lines()
+local status_text = table.concat(status_lines, "\n")
+assert_true(status_text:find("Windows: 1", 1, true) ~= nil, "session status excludes NvimTree")
+vim.api.nvim_win_close(tree_win, true)
 
 print("python_venv_test: assertions passed")
