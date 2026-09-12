@@ -2,7 +2,8 @@
 # 虚拟环境助手模块 - Zsh 版本
 
 # 配置变量
-VENV_DIR="$HOME/Documents/code/python/.venvs"
+: ${CHENHUN_PYTHON_VENV_ROOT:=$HOME/.py_venvs}
+VENV_DIR="$CHENHUN_PYTHON_VENV_ROOT"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -14,13 +15,20 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # 主函数：交互式虚拟环境管理器
-function va() {
-    # 获取所有虚拟环境
-    local envs=()
+function venv_names() {
     local env_path
     for env_path in "$VENV_DIR"/*(/N); do
-        envs+=("${env_path:t}")
+        if [[ ! -x "$env_path/bin/python" ]]; then
+            print -u2 -r -- "Warning: unusable Python environment: ${env_path:t}"
+        fi
+        print -r -- "${env_path:t}"
     done
+}
+
+function va() {
+    # 获取所有虚拟环境
+    local -a envs
+    envs=("${(@f)$(venv_names)}")
     local env_count=${#envs[@]}
     
     if [ $env_count -eq 0 ]; then
