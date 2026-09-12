@@ -47,6 +47,20 @@ local function is_file(path)
   return true
 end
 
+local function is_shared_name(value)
+  return type(value) == "string"
+    and value ~= ""
+    and value ~= "."
+    and value ~= ".."
+    and not value:match("^/")
+    and not value:find("/", 1, true)
+    and not value:find("..", 1, true)
+end
+
+local function is_usable_python(path)
+  return is_file(path) and vim.fn.executable(path) == 1
+end
+
 local function in_scope(path, root)
   return path == root or path:sub(1, #root + 1) == root .. "/"
 end
@@ -117,11 +131,15 @@ local function validate(value)
       warn_broken("local:" .. tostring(value), value)
       return record("broken", ".venv", path or value)
     end
+  elseif not is_shared_name(value) then
+    local invalid_path = config.venv_root .. "/" .. tostring(value)
+    warn_broken("invalid:" .. tostring(value), invalid_path)
+    return record("system")
   else
     path = normalize(config.venv_root .. "/" .. value)
   end
   local result = record(value:sub(1, 1) == "/" and "local" or "shared", value:sub(1, 1) == "/" and ".venv" or value, path)
-  if not is_file(result.python_path) then
+  if not is_usable_python(result.python_path) then
     warn_broken(result.kind .. ":" .. tostring(result.name or result.path), path)
     result.kind = "broken"
     result.python_path = config.default_bin
@@ -160,6 +178,13 @@ local function resolve_state(path, opts)
   local selection
   if opts.manual ~= nil then
     selection = opts.manual
+    if type(selection) == "string" and selection:sub(1, 1) == "/" then
+      local local_path = find_local_venv(target)
+      if not local_path or normalize(selection) ~= local_path then
+        warn_broken("local-boundary:" .. selection, selection)
+        selection = "system"
+      end
+    end
   elseif root and cache.project_overrides[root] ~= nil then
     selection = cache.project_overrides[root]
   elseif root then
@@ -195,7 +220,7 @@ local function same_scope(client, state)
   local client_root = normalize((client.config or {}).root_dir)
   local root = normalize(state.project_root)
   if not client_root or not root then return false end
-  return in_scope(client_root, root) or in_scope(root, client_root)
+  return client_root == root or in_scope(client_root, root)
 end
 
 local function sync_pyright(state)
@@ -254,7 +279,8 @@ function M.sync_for_path(path, opts) return apply_state(resolve_state(path), opt
 function M.set_venv(value, opts)
   opts = vim.tbl_extend("force", { path = get_current_path() }, opts or {})
   local root = resolve_project_root(opts.path)
-  if value and value:sub(1, 1) == "/" and (not root or normalize(value) ~= normalize(root .. "/.venv")) then
+  local local_path = find_local_venv(opts.path)
+  if value and value:sub(1, 1) == "/" and (not local_path or normalize(value) ~= local_path) then
     return false
   end
   local state = resolve_state(opts.path, { manual = value or "system" })

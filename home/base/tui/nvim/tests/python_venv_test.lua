@@ -33,6 +33,11 @@ local standalone_other = root .. "/standalone-other.py"
 local nearest_project = root .. "/nearest-project"
 local broken_project = root .. "/broken-project"
 local dangling_project = root .. "/dangling-project"
+local dangling_bin_project = root .. "/dangling-bin-project"
+local nested_scope_parent = root .. "/scope-parent"
+local nested_scope_child = nested_scope_parent .. "/child"
+local invalid_project = root .. "/invalid-project"
+local nonexec_project = root .. "/nonexec-project"
 local venv_root = root .. "/managed"
 local shared_root = venv_root
 
@@ -42,7 +47,9 @@ end
 
 local function python_fixture(path)
   mkdir(path .. "/bin")
-  vim.fn.writefile({ "#!/bin/sh" }, path .. "/bin/python")
+  local python_path = path .. "/bin/python"
+  vim.fn.writefile({ "#!/bin/sh" }, python_path)
+  vim.fn.setfperm(python_path, "rwxr-xr-x")
 end
 
 mkdir(project .. "/nested/package")
@@ -80,6 +87,26 @@ mkdir(dangling_project .. "/src")
 vim.fn.writefile({ "[project]" }, dangling_project .. "/pyproject.toml")
 vim.fn.writefile({ "dangling" }, dangling_project .. "/.pyvenv")
 vim.uv.fs_symlink(root .. "/does-not-exist", venv_root .. "/dangling")
+
+mkdir(dangling_bin_project .. "/broken-bin/bin")
+vim.uv.fs_symlink(root .. "/does-not-exist", dangling_bin_project .. "/broken-bin/bin/python")
+vim.fn.writefile({ "broken-bin" }, dangling_bin_project .. "/.pyvenv")
+
+mkdir(nested_scope_parent .. "/src")
+vim.fn.writefile({ "[project]" }, nested_scope_parent .. "/pyproject.toml")
+mkdir(nested_scope_child .. "/src")
+vim.fn.writefile({ "[project]" }, nested_scope_child .. "/pyproject.toml")
+
+mkdir(invalid_project .. "/src")
+vim.fn.writefile({ "[project]" }, invalid_project .. "/pyproject.toml")
+vim.fn.writefile({ "../manual" }, invalid_project .. "/.pyvenv")
+
+mkdir(nonexec_project .. "/src")
+vim.fn.writefile({ "[project]" }, nonexec_project .. "/pyproject.toml")
+mkdir(venv_root .. "/nonexec/bin")
+local nonexec_python = venv_root .. "/nonexec/bin/python"
+vim.fn.writefile({ "#!/bin/sh" }, nonexec_python)
+vim.fn.setfperm(nonexec_python, "rw-r--r--")
 
 vim.env.CHENHUN_PYTHON_VENV_ROOT = venv_root
 vim.opt.rtp:prepend(vim.fn.getcwd() .. "/home/base/tui/nvim/config")
@@ -133,6 +160,15 @@ assert_equal(broken_state.python_path, vim.g.python3_host_prog, "broken state us
 local dangling_state = test_api.resolve_state(dangling_project .. "/src/main.py")
 assert_equal(dangling_state.kind, "broken", "dangling shared environment")
 assert_equal(dangling_state.path, venv_root .. "/dangling", "dangling environment path")
+local dangling_bin_state = test_api.resolve_state(dangling_bin_project .. "/src/main.py")
+assert_equal(dangling_bin_state.kind, "broken", "dangling bin/python")
+
+assert_equal(test_api.resolve_state(invalid_project .. "/src/main.py").kind, "system", "invalid declared traversal")
+for _, invalid_name in ipairs({ "", "/tmp/outside", "../manual", "nested/name" }) do
+  assert_equal(test_api.resolve_state(project .. "/nested/package/main.py", { manual = invalid_name }).kind, "system", "invalid shared name " .. invalid_name)
+end
+local nonexec_state = test_api.resolve_state(nonexec_project .. "/src/main.py", { manual = "nonexec" })
+assert_equal(nonexec_state.kind, "broken", "non-executable interpreter")
 
 local manual_state = test_api.resolve_state(project .. "/nested/package/main.py", { manual = "manual" })
 assert_equal(manual_state.kind, "shared", "manual environment kind")
@@ -151,6 +187,7 @@ local allowed_shared_paths = {
   [venv_root .. "/git-project"] = true,
   [venv_root .. "/nested"] = true,
   [venv_root .. "/broken"] = true,
+  [venv_root .. "/nonexec"] = true,
 }
 local expected_choice_keys = {
   ["local\0" .. project .. "/.venv"] = true,
@@ -159,6 +196,7 @@ local expected_choice_keys = {
   ["shared\0" .. venv_root .. "/git-project"] = true,
   ["broken\0" .. venv_root .. "/nested"] = true,
   ["broken\0" .. venv_root .. "/broken"] = true,
+  ["broken\0" .. venv_root .. "/nonexec"] = true,
   ["system\0<system>"] = true,
 }
 assert_equal(#choices, vim.tbl_count(expected_choice_keys), "chooser choice count")
@@ -208,6 +246,27 @@ end
 python_venv.choose_venv()
 vim.ui.select = original_select
 assert_equal(test_api.resolve_state(project .. "/nested/package/main.py").kind, "local", "chooser selects local")
+
+vim.api.nvim_buf_set_name(0, nearest_project .. "/src/deep/main.py")
+vim.ui.select = function(items, _, callback)
+  for _, item in ipairs(items) do
+    if item:find("local:", 1, true) then callback(item); return end
+  end
+  fail("nested local chooser entry missing")
+end
+python_venv.choose_venv()
+vim.ui.select = original_select
+assert_equal(test_api.resolve_state(nearest_project .. "/src/deep/main.py").path, nearest_project .. "/src/.venv", "nested chooser selects local")
+
+local parent_client = { name = "pyright", config = { root_dir = nested_scope_parent, settings = { python = { pythonPath = "parent" } } }, settings = {} }
+local child_client = { name = "pyright", config = { root_dir = nested_scope_child, settings = { python = { pythonPath = "child" } } }, settings = {} }
+parent_client.notify, child_client.notify = function() end, function() end
+local original_get_clients = vim.lsp.get_clients
+vim.lsp.get_clients = function() return { parent_client, child_client } end
+assert_true(python_venv.set_venv("manual", { path = nested_scope_child .. "/src/main.py" }), "set child environment")
+vim.lsp.get_clients = original_get_clients
+assert_equal(parent_client.config.settings.python.pythonPath, "parent", "parent Pyright scope unchanged")
+assert_equal(child_client.config.settings.python.pythonPath, venv_root .. "/manual/bin/python", "child Pyright scope updated")
 
 local original_path = vim.env.PATH or ""
 assert_true(python_venv.set_venv("manual", { path = project .. "/nested/package/main.py" }), "set shared environment")
