@@ -29,6 +29,10 @@ local project = root .. "/project"
 local declared_project = root .. "/declared-project"
 local git_project = root .. "/git-project"
 local standalone = root .. "/standalone.py"
+local standalone_other = root .. "/standalone-other.py"
+local nearest_project = root .. "/nearest-project"
+local broken_project = root .. "/broken-project"
+local dangling_project = root .. "/dangling-project"
 local venv_root = root .. "/managed"
 local shared_root = venv_root
 
@@ -60,6 +64,22 @@ python_fixture(git_project .. "/.venv")
 mkdir(root .. "/other")
 python_fixture(root .. "/other/.venv")
 vim.fn.writefile({ "standalone" }, standalone)
+vim.fn.writefile({ "standalone-other" }, standalone_other)
+
+mkdir(nearest_project .. "/src/deep")
+vim.fn.writefile({ "[project]" }, nearest_project .. "/pyproject.toml")
+python_fixture(nearest_project .. "/.venv")
+python_fixture(nearest_project .. "/src/.venv")
+
+mkdir(broken_project .. "/src")
+vim.fn.writefile({ "[project]" }, broken_project .. "/pyproject.toml")
+mkdir(venv_root .. "/broken/bin")
+vim.fn.writefile({ "", " missing-target " }, broken_project .. "/.pyvenv")
+
+mkdir(dangling_project .. "/src")
+vim.fn.writefile({ "[project]" }, dangling_project .. "/pyproject.toml")
+vim.fn.writefile({ "dangling" }, dangling_project .. "/.pyvenv")
+vim.uv.fs_symlink(root .. "/does-not-exist", venv_root .. "/dangling")
 
 vim.env.CHENHUN_PYTHON_VENV_ROOT = venv_root
 vim.opt.rtp:prepend(vim.fn.getcwd() .. "/home/base/tui/nvim/config")
@@ -71,6 +91,15 @@ assert_true(test_api, "test-facing API")
 assert_true(test_api.resolve_project_root, "resolve_project_root helper")
 assert_true(test_api.resolve_state, "resolve_state helper")
 assert_true(test_api.list_choices, "list_choices helper")
+for _, name in ipairs({
+  "resolve_project_root", "get_current_venv", "get_current_python_path",
+  "get_pyright_client_name", "is_managed_pyright_client", "register_managed_pyright",
+  "cleanup_ghost_pyright", "get_pyright_python_settings_for_path", "get_pyright_python_settings",
+  "sync_for_path", "set_venv", "choose_venv", "on_pyright_attach", "autoset_venv",
+  "show_session_status", "lualine_component",
+}) do
+  assert_true(type(python_venv[name]) == "function", "public API " .. name)
+end
 
 assert_equal(test_api.resolve_project_root(project .. "/nested/package/main.py"), project, "pyproject root")
 assert_equal(test_api.resolve_project_root(declared_project .. "/src/main.py"), declared_project, "pyvenv root")
@@ -93,6 +122,18 @@ assert_equal(declared_state.name, "shared", "declared environment name")
 assert_equal(declared_state.path, shared_root .. "/shared", "declared environment path")
 assert_equal(declared_state.python_path, shared_root .. "/shared/bin/python", "declared interpreter path")
 
+assert_equal(test_api.resolve_state(nearest_project .. "/src/deep/main.py").path, nearest_project .. "/src/.venv", "nearest local environment")
+assert_equal(test_api.resolve_state(declared_project .. "/src/main.py", { manual = " shared " }).name, " shared ", "manual name remains explicit")
+
+local broken_state = test_api.resolve_state(broken_project .. "/src/main.py")
+assert_equal(broken_state.kind, "broken", "missing declared environment")
+assert_equal(broken_state.name, "missing-target", "broken declared name")
+assert_equal(broken_state.python_path, vim.g.python3_host_prog, "broken state uses system interpreter")
+
+local dangling_state = test_api.resolve_state(dangling_project .. "/src/main.py")
+assert_equal(dangling_state.kind, "broken", "dangling shared environment")
+assert_equal(dangling_state.path, venv_root .. "/dangling", "dangling environment path")
+
 local manual_state = test_api.resolve_state(project .. "/nested/package/main.py", { manual = "manual" })
 assert_equal(manual_state.kind, "shared", "manual environment kind")
 assert_equal(manual_state.name, "manual", "manual override priority")
@@ -108,19 +149,23 @@ local allowed_shared_paths = {
   [venv_root .. "/shared"] = true,
   [venv_root .. "/manual"] = true,
   [venv_root .. "/git-project"] = true,
+  [venv_root .. "/nested"] = true,
+  [venv_root .. "/broken"] = true,
 }
 local expected_choice_keys = {
   ["local\0" .. project .. "/.venv"] = true,
   ["shared\0" .. venv_root .. "/shared"] = true,
   ["shared\0" .. venv_root .. "/manual"] = true,
   ["shared\0" .. venv_root .. "/git-project"] = true,
+  ["broken\0" .. venv_root .. "/nested"] = true,
+  ["broken\0" .. venv_root .. "/broken"] = true,
   ["system\0<system>"] = true,
 }
 assert_equal(#choices, vim.tbl_count(expected_choice_keys), "chooser choice count")
 local seen_choices = {}
 for _, choice in ipairs(choices) do
   local is_current_local = choice.kind == "local" and choice.path == project .. "/.venv"
-  local is_direct_shared = choice.kind == "shared" and allowed_shared_paths[choice.path] == true
+   local is_direct_shared = (choice.kind == "shared" or choice.kind == "broken") and allowed_shared_paths[choice.path] == true
   local is_system = choice.kind == "system" and choice.name == nil
   if not (is_current_local or is_direct_shared or is_system) then
     fail("chooser unexpected choice: " .. tostring(choice.kind) .. " " .. tostring(choice.path or choice.name))
@@ -135,5 +180,49 @@ end
 for key in pairs(expected_choice_keys) do
   assert_true(seen_choices[key], "chooser expected choice " .. key)
 end
+
+local broken_choices = test_api.list_choices(broken_project .. "/src/main.py")
+local saw_broken = false
+for _, choice in ipairs(broken_choices) do
+  if choice.name == "broken" then saw_broken = true end
+end
+assert_true(saw_broken, "chooser keeps broken direct shared entry")
+
+local shared_settings = python_venv.get_pyright_python_settings_for_path(declared_project .. "/src/main.py")
+assert_equal(shared_settings.pythonPath, shared_root .. "/shared/bin/python", "shared Pyright pythonPath")
+assert_equal(shared_settings.venvPath, venv_root, "shared Pyright venvPath")
+assert_equal(shared_settings.venv, "shared", "shared Pyright venv")
+local local_settings = python_venv.get_pyright_python_settings_for_path(project .. "/nested/package/main.py")
+assert_equal(local_settings.venvPath, project, "local Pyright venvPath")
+assert_equal(local_settings.venv, ".venv", "local Pyright venv")
+
+local original_select = vim.ui.select
+local selected_label
+vim.api.nvim_buf_set_name(0, project .. "/nested/package/main.py")
+vim.ui.select = function(items, _, callback)
+  for _, item in ipairs(items) do
+    if item:find("local:", 1, true) then selected_label = item; callback(item); return end
+  end
+  fail("chooser local entry missing")
+end
+python_venv.choose_venv()
+vim.ui.select = original_select
+assert_equal(test_api.resolve_state(project .. "/nested/package/main.py").kind, "local", "chooser selects local")
+
+local original_path = vim.env.PATH or ""
+assert_true(python_venv.set_venv("manual", { path = project .. "/nested/package/main.py" }), "set shared environment")
+assert_equal(vim.env.VIRTUAL_ENV, venv_root .. "/manual", "shared VIRTUAL_ENV")
+assert_true(vim.env.PATH:match(vim.pesc(venv_root .. "/manual/bin")), "shared PATH entry")
+assert_equal(vim.g.python3_host_prog, venv_root .. "/manual/bin/python", "shared host interpreter")
+assert_true(python_venv.set_venv("system", { path = project .. "/nested/package/main.py" }), "suppress project environment")
+assert_nil(vim.env.VIRTUAL_ENV, "system VIRTUAL_ENV")
+assert_nil(vim.env.PATH:match(vim.pesc(venv_root .. "/manual/bin")), "system removes old PATH entry")
+assert_equal(vim.g.python3_host_prog, vim.fn.exepath("python3"), "system host interpreter")
+vim.env.PATH = original_path
+
+assert_true(python_venv.set_venv("manual", { path = standalone }), "set standalone fallback")
+assert_equal(test_api.resolve_state(standalone).name, "manual", "standalone fallback applies")
+assert_equal(test_api.resolve_state(standalone_other).kind, "system", "standalone fallback does not leak")
+assert_true(python_venv.set_venv("system", { path = standalone }), "clear standalone fallback")
 
 print("python_venv_test: assertions passed")

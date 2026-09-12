@@ -14,12 +14,11 @@ local cache = {
   current_project_root = nil,
   project_overrides = {},
   manual_fallback = nil,
+  active_venv_path = nil,
   warnings = {},
 }
 
 local status_view = { buf = nil, win = nil }
-local status_ns = vim.api.nvim_create_namespace("PythonVenvStatus")
-vim.api.nvim_set_hl(0, "PythonStatusNumber", { fg = "#ff9e64", bold = true })
 
 local function normalize(path)
   if not path or path == "" then return nil end
@@ -134,8 +133,24 @@ local function read_declared_name(root)
   if not root or not is_file(root .. "/.pyvenv") then return nil end
   local ok, lines = pcall(vim.fn.readfile, root .. "/.pyvenv")
   if not ok then return nil end
-  local name = vim.trim(lines[1] or "")
-  return name ~= "" and name or nil
+  for _, line in ipairs(lines) do
+    local name = vim.trim(line)
+    if name ~= "" then return name end
+  end
+  return nil
+end
+
+local function find_local_venv(path)
+  local current = path_to_directory(path)
+  while current do
+    local candidate = current .. "/.venv"
+    if is_directory(candidate) then return normalize(candidate) end
+    if current == "/" then break end
+    local parent = vim.fs.dirname(current)
+    if parent == current then break end
+    current = parent
+  end
+  return nil
 end
 
 local function resolve_state(path, opts)
@@ -148,11 +163,10 @@ local function resolve_state(path, opts)
   elseif root and cache.project_overrides[root] ~= nil then
     selection = cache.project_overrides[root]
   elseif root then
-    local local_path = root .. "/.venv"
-    if is_directory(local_path) then selection = local_path end
+    selection = find_local_venv(target)
     if not selection then selection = read_declared_name(root) end
-  elseif cache.manual_fallback ~= nil then
-    selection = cache.manual_fallback
+  elseif cache.manual_fallback and normalize(target) == cache.manual_fallback.target then
+    selection = cache.manual_fallback.value
   end
   local state = validate(selection)
   state.project_root = root
@@ -198,15 +212,27 @@ end
 local function apply_state(state, opts)
   opts = vim.tbl_extend("force", { restart = true, notify = true, force_refresh = false }, opts or {})
   local effective = state.kind == "broken" and record("system") or state
+  effective.project_root = state.project_root
+  effective.target_dir = state.target_dir
   local current_key = effective.kind == "system" and nil or (effective.kind == "local" and effective.path or effective.name)
   local changed = cache.current ~= current_key or cache.current_python_path ~= effective.python_path
     or cache.current_project_root ~= state.project_root
+  if cache.active_venv_path then
+    local old_bin = cache.active_venv_path .. "/bin"
+    local parts = {}
+    for part in string.gmatch(vim.env.PATH or "", "[^:]+") do
+      if part ~= old_bin then table.insert(parts, part) end
+    end
+    vim.env.PATH = table.concat(parts, ":")
+  end
   vim.g.python3_host_prog = effective.python_path
   if effective.kind == "local" or effective.kind == "shared" then
     vim.env.VIRTUAL_ENV = effective.path
     vim.env.PATH = effective.path .. "/bin:" .. (vim.env.PATH or "")
+    cache.active_venv_path = effective.path
   else
     vim.env.VIRTUAL_ENV = nil
+    cache.active_venv_path = nil
   end
   cache.current, cache.current_python_path, cache.current_project_root = current_key, effective.python_path, state.project_root
   refresh_lualine()
@@ -233,22 +259,23 @@ function M.set_venv(value, opts)
   end
   local state = resolve_state(opts.path, { manual = value or "system" })
   if state.kind == "broken" then return false end
-  if root then cache.project_overrides[root] = value or "system" else cache.manual_fallback = value or "system" end
+  if root then
+    cache.project_overrides[root] = value or "system"
+  else
+    cache.manual_fallback = { value = value or "system", target = normalize(opts.path) }
+  end
   return apply_state(state, { restart = true, notify = true })
 end
 
 local function list_choices(path)
   local choices = {}
-  local root = resolve_project_root(path)
-  local local_path = root and root .. "/.venv" or nil
+  local local_path = find_local_venv(path)
   if local_path and is_directory(local_path) then table.insert(choices, record("local", ".venv", local_path)) end
   local entries = {}
   local ok, iterator = pcall(vim.fs.dir, config.venv_root)
   if ok and iterator then
     for name, type in iterator do
-      if type == "directory" and is_directory(config.venv_root .. "/" .. name .. "/bin") then
-        table.insert(entries, name)
-      end
+      if type == "directory" then table.insert(entries, name) end
     end
   end
   table.sort(entries)
@@ -296,21 +323,44 @@ end
 
 function M.show_session_status()
   if status_view.win and vim.api.nvim_win_is_valid(status_view.win) then close_status_window(); return end
+  local visible_windows, python_buffers = 0, 0
+  for _, winid in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(winid) then visible_windows = visible_windows + 1 end
+  end
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].filetype == "python" then python_buffers = python_buffers + 1 end
+  end
+  local clients = vim.lsp.get_clients({ name = "pyright" })
   local lines = {
-    "Python / LSP session",
+    "Python / LSP session status",
     "",
     "  File: " .. shorten_path(vim.api.nvim_buf_get_name(0)),
     "  Environment: " .. (cache.current or "system"),
     "  Interpreter: " .. shorten_path(cache.current_python_path),
     "",
-    "  Pyright clients: " .. #vim.lsp.get_clients({ name = "pyright" }),
+    "  Session overview",
+    "    Windows: " .. visible_windows,
+    "    Tabs: " .. #vim.api.nvim_list_tabpages(),
+    "    Python buffers: " .. python_buffers,
+    "",
+    "  Pyright clients: " .. #clients,
   }
+  for index, client in ipairs(clients) do
+    local settings = (((client.config or {}).settings or {}).python or {})
+    table.insert(lines, string.format("    %d. %s", index, settings.venv or "system"))
+    table.insert(lines, "    Root: " .. shorten_path((client.config or {}).root_dir or "unknown"))
+    table.insert(lines, "    Python: " .. shorten_path(settings.pythonPath or config.default_bin))
+  end
+  if #clients == 0 then table.insert(lines, "    No active Pyright client") end
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden, vim.bo[buf].modifiable = "wipe", true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
-  local width = math.min(math.max(40, vim.fn.strdisplaywidth(lines[1]) + 4), math.max(vim.o.columns - 8, 40))
-  local win = vim.api.nvim_open_win(buf, true, { relative = "editor", width = width, height = #lines + 2, row = 2, col = math.floor((vim.o.columns - width) / 2), style = "minimal", border = "rounded" })
+  local width = 0
+  for _, line in ipairs(lines) do width = math.max(width, vim.fn.strdisplaywidth(line)) end
+  width = math.min(math.max(width + 4, 72), math.max(vim.o.columns - 8, 60))
+  local height = math.min(#lines + 2, math.max(vim.o.lines - 6, 12))
+  local win = vim.api.nvim_open_win(buf, true, { relative = "editor", width = width, height = height, row = math.floor((vim.o.lines - height) / 2) - 1, col = math.floor((vim.o.columns - width) / 2), style = "minimal", border = "rounded", title = " Python / LSP status ", title_pos = "center" })
   status_view.buf, status_view.win = buf, win
   vim.keymap.set("n", "q", close_status_window, { buffer = buf, nowait = true, silent = true })
   vim.keymap.set("n", "<Esc>", close_status_window, { buffer = buf, nowait = true, silent = true })
