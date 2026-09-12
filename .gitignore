@@ -13,6 +13,9 @@ result-*
 *.log.*
 *.nvimlog
 
+# Git worktrees
+.worktrees/
+
 # Neovim local/private config
 programs/nvim/config/lua/chenhun/core/python_venv_map.lua
 
