@@ -7,9 +7,17 @@ tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/venv-test.XXXXXX")
 trap 'rm -rf "$tmp_root"' EXIT
 
 mkdir -p "$tmp_root/root/alpha/bin" "$tmp_root/root/beta" "$tmp_root/root/alpha/nested/.venv" "$tmp_root/root/odd name * env/bin"
+newline_name=$'line\nname'
+mkdir -p "$tmp_root/root/$newline_name/bin"
+control_name=$'control\001name'
+mkdir -p "$tmp_root/root/$control_name/bin"
 touch "$tmp_root/root/alpha/bin/python"
 touch "$tmp_root/root/odd name * env/bin/python"
 chmod +x "$tmp_root/root/alpha/bin/python" "$tmp_root/root/odd name * env/bin/python"
+touch "$tmp_root/root/$newline_name/bin/python"
+chmod +x "$tmp_root/root/$newline_name/bin/python"
+touch "$tmp_root/root/$control_name/bin/python"
+chmod +x "$tmp_root/root/$control_name/bin/python"
 
 export CHENHUN_PYTHON_VENV_ROOT="$tmp_root/root"
 source "$script_dir/venv.zsh"
@@ -19,6 +27,8 @@ names=("${(@f)$(venv_names 2>"$tmp_root/warnings")}")
 [[ "${names[1]}" == "alpha" ]]
 [[ "${names[2]}" == "beta" ]]
 [[ "${names[3]}" == "odd name * env" ]]
+[[ "${names[(I)$newline_name]}" -eq 0 ]]
+[[ "${names[(I)$control_name]}" -eq 0 ]]
 [[ "$(<"$tmp_root/warnings")" == *"beta"* ]]
 [[ "${names[(I).venv]}" -eq 0 ]]
 

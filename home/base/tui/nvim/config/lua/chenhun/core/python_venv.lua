@@ -57,6 +57,7 @@ local function is_shared_name(value)
     and not value:match("^/")
     and not value:find("/", 1, true)
     and not value:find("..", 1, true)
+    and not value:find("%c")
 end
 
 local function is_usable_python(path)
@@ -174,7 +175,11 @@ local function find_local_venv(path)
   local current = path_to_directory(path)
   while current do
     local candidate = current .. "/.venv"
-    if is_directory(candidate) then return normalize(candidate) end
+    if is_directory(candidate) then
+      local normalized = normalize(candidate)
+      if is_usable_python(normalized .. "/bin/python") then return normalized end
+      warn_broken("local:" .. normalized, normalized .. "/bin/python")
+    end
     if current == "/" then break end
     local parent = vim.fs.dirname(current)
     if parent == current then break end
@@ -232,7 +237,7 @@ local function same_scope(client, state)
   local client_root = normalize((client.config or {}).root_dir)
   local root = normalize(state.project_root)
   if not client_root or not root then return false end
-  return client_root == root or in_scope(client_root, root)
+  return client_root == root
 end
 
 local function sync_pyright(state)
@@ -437,6 +442,7 @@ M._test = {
   resolve_state = function(path, opts) return resolve_state(path, opts) end,
   list_choices = list_choices,
   session_lines = build_session_lines,
+  warnings = cache.warnings,
 }
 
 M.autoset_venv({ path = vim.fn.getcwd(), notify = false, restart = false })

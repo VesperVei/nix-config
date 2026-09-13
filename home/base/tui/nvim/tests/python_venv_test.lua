@@ -36,6 +36,11 @@ local dangling_project = root .. "/dangling-project"
 local dangling_bin_project = root .. "/dangling-bin-project"
 local nested_scope_parent = root .. "/scope-parent"
 local nested_scope_child = nested_scope_parent .. "/child"
+local local_fallback_parent = root .. "/local-fallback"
+local local_fallback_child = local_fallback_parent .. "/child"
+local local_dangling_parent = root .. "/local-dangling"
+local local_dangling_child = local_dangling_parent .. "/child"
+local local_no_usable = root .. "/local-no-usable"
 local invalid_project = root .. "/invalid-project"
 local nonexec_project = root .. "/nonexec-project"
 local venv_root = root .. "/managed"
@@ -97,6 +102,18 @@ vim.fn.writefile({ "[project]" }, nested_scope_parent .. "/pyproject.toml")
 mkdir(nested_scope_child .. "/src")
 vim.fn.writefile({ "[project]" }, nested_scope_child .. "/pyproject.toml")
 
+mkdir(local_fallback_child .. "/src/.venv/bin")
+vim.fn.writefile({ "[project]" }, local_fallback_child .. "/pyproject.toml")
+python_fixture(local_fallback_parent .. "/.venv")
+
+mkdir(local_dangling_child .. "/src/.venv/bin")
+vim.fn.writefile({ "[project]" }, local_dangling_child .. "/pyproject.toml")
+vim.uv.fs_symlink(root .. "/does-not-exist", local_dangling_child .. "/src/.venv/bin/python")
+python_fixture(local_dangling_parent .. "/.venv")
+
+mkdir(local_no_usable .. "/src/.venv/bin")
+vim.fn.writefile({ "[project]" }, local_no_usable .. "/pyproject.toml")
+
 mkdir(invalid_project .. "/src")
 vim.fn.writefile({ "[project]" }, invalid_project .. "/pyproject.toml")
 vim.fn.writefile({ "../manual" }, invalid_project .. "/.pyvenv")
@@ -150,6 +167,12 @@ assert_equal(declared_state.path, shared_root .. "/shared", "declared environmen
 assert_equal(declared_state.python_path, shared_root .. "/shared/bin/python", "declared interpreter path")
 
 assert_equal(test_api.resolve_state(nearest_project .. "/src/deep/main.py").path, nearest_project .. "/src/.venv", "nearest local environment")
+assert_equal(test_api.resolve_state(local_fallback_child .. "/src/main.py").path, local_fallback_parent .. "/.venv", "nearest usable local environment")
+assert_equal(test_api.resolve_state(local_dangling_child .. "/src/main.py").path, local_dangling_parent .. "/.venv", "dangling local environment falls back to parent")
+assert_equal(test_api.resolve_state(local_no_usable .. "/src/main.py").kind, "system", "no usable local environment falls back to system")
+assert_true(test_api.warnings["local:" .. local_fallback_child .. "/src/.venv"], "warns for missing local interpreter")
+assert_true(test_api.warnings["local:" .. local_dangling_child .. "/src/.venv"], "warns for dangling local interpreter")
+assert_true(test_api.warnings["local:" .. local_no_usable .. "/src/.venv"], "warns when local search falls back")
 assert_equal(test_api.resolve_state(declared_project .. "/src/main.py", { manual = " shared " }).name, " shared ", "manual name remains explicit")
 
 local broken_state = test_api.resolve_state(broken_project .. "/src/main.py")
@@ -166,6 +189,10 @@ assert_equal(dangling_bin_state.kind, "broken", "dangling bin/python")
 assert_equal(test_api.resolve_state(invalid_project .. "/src/main.py").kind, "system", "invalid declared traversal")
 for _, invalid_name in ipairs({ "", "/tmp/outside", "../manual", "nested/name" }) do
   assert_equal(test_api.resolve_state(project .. "/nested/package/main.py", { manual = invalid_name }).kind, "system", "invalid shared name " .. invalid_name)
+end
+for _, invalid_name in ipairs({ "has\nnewline", "has\rreturn", "has" .. string.char(1) .. "control" }) do
+  assert_equal(test_api.resolve_state(project .. "/nested/package/main.py", { manual = invalid_name }).kind, "system", "control character shared name")
+  assert_equal(python_venv.set_venv(invalid_name, { path = project .. "/nested/package/main.py" }), false, "reject control character shared name")
 end
 local nonexec_state = test_api.resolve_state(nonexec_project .. "/src/main.py", { manual = "nonexec" })
 assert_equal(nonexec_state.kind, "broken", "non-executable interpreter")
@@ -282,9 +309,12 @@ local child_client = { name = "pyright", config = { root_dir = nested_scope_chil
 parent_client.notify, child_client.notify = function() end, function() end
 local original_get_clients = vim.lsp.get_clients
 vim.lsp.get_clients = function() return { parent_client, child_client } end
+assert_true(python_venv.set_venv("manual", { path = nested_scope_parent .. "/src/main.py" }), "set parent environment")
+assert_equal(parent_client.config.settings.python.pythonPath, venv_root .. "/manual/bin/python", "parent Pyright scope updated")
+assert_equal(child_client.config.settings.python.pythonPath, "child", "child Pyright scope unchanged")
 assert_true(python_venv.set_venv("manual", { path = nested_scope_child .. "/src/main.py" }), "set child environment")
 vim.lsp.get_clients = original_get_clients
-assert_equal(parent_client.config.settings.python.pythonPath, "parent", "parent Pyright scope unchanged")
+assert_equal(parent_client.config.settings.python.pythonPath, venv_root .. "/manual/bin/python", "parent Pyright scope unchanged")
 assert_equal(child_client.config.settings.python.pythonPath, venv_root .. "/manual/bin/python", "child Pyright scope updated")
 
 local original_path = vim.env.PATH or ""

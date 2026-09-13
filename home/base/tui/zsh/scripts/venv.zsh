@@ -16,12 +16,17 @@ NC='\033[0m'
 
 # 主函数：交互式虚拟环境管理器
 function venv_names() {
-    local env_path
+    local env_path env_name
     for env_path in "$VENV_DIR"/*(/N); do
-        if [[ ! -x "$env_path/bin/python" ]]; then
-            print -u2 -r -- "Warning: unusable Python environment: ${env_path:t}"
+        env_name=${env_path:t}
+        if [[ "$env_name" == *[[:cntrl:]]* ]]; then
+            print -u2 -r -- "Warning: invalid Python environment name: ${env_name}"
+            continue
         fi
-        print -r -- "${env_path:t}"
+        if [[ ! -x "$env_path/bin/python" ]]; then
+            print -u2 -r -- "Warning: unusable Python environment: ${env_name}"
+        fi
+        print -r -- "$env_name"
     done
 }
 
