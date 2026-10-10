@@ -63,10 +63,9 @@
 
           #-- python
           uv # python project package manager
+          pyright # python language server (top-level so pyright-langserver is in PATH)
           (python313.withPackages (
             ps: with ps; [
-              # python language server
-              pyright
               ruff
 
               black # python formatter

@@ -2,7 +2,8 @@
 # 虚拟环境助手模块 - Zsh 版本
 
 # 配置变量
-VENV_DIR="$HOME/Documents/code/python/.venvs"
+: ${CHENHUN_PYTHON_VENV_ROOT:=$HOME/.py_venvs}
+VENV_DIR="$CHENHUN_PYTHON_VENV_ROOT"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -14,13 +15,28 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # 主函数：交互式虚拟环境管理器
+function venv_names() {
+    local env_path env_name
+    for env_path in "$VENV_DIR"/*(/N); do
+        env_name=${env_path:t}
+        if [[ "$env_name" == *[[:cntrl:]]* ]]; then
+            print -u2 -r -- "Warning: invalid Python environment name: ${env_name}"
+            continue
+        fi
+        if [[ ! -x "$env_path/bin/python" ]]; then
+            print -u2 -r -- "Warning: unusable Python environment: ${env_name}"
+        fi
+        print -r -- "$env_name"
+    done
+}
+
 function va() {
     # 获取所有虚拟环境
-    local envs=()
-    local env_path
-    for env_path in "$VENV_DIR"/*(/N); do
-        envs+=("${env_path:t}")
-    done
+    local -a envs=()
+    local env_name
+    while IFS= read -r env_name; do
+        envs+=("$env_name")
+    done < <(venv_names)
     local env_count=${#envs[@]}
     
     if [ $env_count -eq 0 ]; then
@@ -30,7 +46,7 @@ function va() {
     fi
     
     # 检查当前是否已激活虚拟环境
-    if [ -n "$VIRTUAL_ENV" ]; then
+    if [ -n "${VIRTUAL_ENV:-}" ]; then
         current_env=$(basename "$VIRTUAL_ENV")
         echo -e "${YELLOW}📌 当前已激活环境: ${BOLD}$current_env${NC}"
         
@@ -62,7 +78,7 @@ function va() {
     for i in {1..$env_count}; do
         local env_name="${envs[$i]}"
         
-        if [ -n "$VIRTUAL_ENV" ] && [ "$(basename "$VIRTUAL_ENV")" = "$env_name" ]; then
+        if [ -n "${VIRTUAL_ENV:-}" ] && [ "$(basename "$VIRTUAL_ENV")" = "$env_name" ]; then
             # 注意：显示序号从 0 开始，但索引从 1 开始
             printf "${GREEN}➤ %2d) ${BOLD}%s${NC} ${YELLOW}(当前激活)${NC}\n" "$((i-1))" "$env_name"
         else
