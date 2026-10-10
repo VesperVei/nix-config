@@ -33,6 +33,7 @@ in
     #环境变量
     sessionVariables = {
       WORKON_HOME = "${config.home.homeDirectory}/Documents/code/python/.venvs";
+      CHENHUN_PYTHON_VENV_ROOT = "${config.home.homeDirectory}/Documents/code/python/.venvs";
     };
     # 别名
     shellAliases = {
