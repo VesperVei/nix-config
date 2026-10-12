@@ -11,7 +11,9 @@ let
   # 2. 自动获取目录下所有以 .zsh 结尾的文件，并生成 source 语句
   # 过滤掉 init.zsh 本身（如果你还保留它的话）
   customModules = builtins.attrNames (
-    lib.filterAttrs (name: type: type == "regular" && lib.hasSuffix ".zsh" name) (
+    lib.filterAttrs (
+      name: type: type == "regular" && lib.hasSuffix ".zsh" name && !lib.hasSuffix "_test.zsh" name
+    ) (
       builtins.readDir scriptDir
     )
   );
@@ -25,6 +27,7 @@ in
     ffmpeg # Tool's editing Video and Audio
     qemu
     binwalk
+    mpv # media player
   ];
 
   programs.zsh = {
