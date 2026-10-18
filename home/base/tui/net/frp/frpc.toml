@@ -1,0 +1,11 @@
+serverAddr = "120.26.137.235"
+serverPort = 6667
+auth.token = "sk-vespervei-11"
+
+[[proxies]]
+name = "agent"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8787
+remotePort = 8787
+
